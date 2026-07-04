@@ -9,7 +9,7 @@ class Car {
     }
 
     update(input, dt) {
-        const accel = input.throttle ? CAR.accel : (input.brake ? CAR.braking : CAR.decier);
+        const accel = input.throttle ? CAR.accel : (input.brake ? CAR.braking : CAR.decel);
         
         // Apply acceleration
         this.speed += accel * dt * 10; // Simple scaling
@@ -18,9 +18,8 @@ class Car {
         if (this.speed > CAR.maxSpeed) this.speed = CAR.maxSpeed;
         if (this.speed < 0) this.speed = 0;
 
-        // Steering
+        // Steering (only while moving)
         if (this.speed > 0) {
-            const turnFactor = (this.speed / CAR.maxSpeed); // Turn slower at low speeds? No, usually faster
             if (input.left) this.x -= (CAR.turnSpeed * dt * 0.002);
             if (input.right) this.x += (CAR.turnSpeed * dt * 0.002);
         }
@@ -54,7 +53,7 @@ class Car {
         
         // -- Car Body (Main) --
         // A Cyberpunk sports car shape
-        ctx.fillStyle = CAR.bodyColor || COLORS.carBody;
+        ctx.fillStyle = COLORS.carBody;
         
         // Rear Bumper Area
         ctx.beginPath();

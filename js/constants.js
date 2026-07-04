@@ -1,5 +1,5 @@
 const CAM = {
-  elevation: 30, // Camera height
+  elevation: 1000, // Camera height above the road
   distance: 100, // Distance behind car
   fov: 90, // Field of view
 };
@@ -17,7 +17,7 @@ const CAR = {
   maxSpeed: 6000, // Max speed
   accel: 50, // Acceleration rate
   braking: -100, // Braking rate
-  decier: -20, // Natural deceleration (friction)
+  decel: -20, // Natural deceleration (friction)
   offRoadDecel: -100, // Friction when off-road
   offRoadLimit: 1500, // Max speed when off-road
   turnSpeed: 1000, // Turning responsiveness

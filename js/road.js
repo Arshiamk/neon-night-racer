@@ -5,7 +5,7 @@ class Road {
         this.rumbleLength = ROAD.rumbleLength;
         this.width = ROAD.width;
         this.lanes = ROAD.lanes;
-        
+
         this.reset();
     }
 
@@ -37,77 +37,50 @@ class Road {
         });
     }
 
-    // Project 3D world coordinates to 2D screen coordinates
-    project(p, cameraX, cameraY, cameraZ, cameraDepth, width, height, roadWidth) {
-        p.camera.x = (p.world.x || 0) - cameraX;
-        p.camera.y = (p.world.y || 0) - cameraY;
-        p.camera.z = (p.world.z || 0) - cameraZ;
-        
-        // Avoid division by zero
-        if (p.camera.z === 0) p.camera.z = 1;
-
-        p.screen.scale = cameraDepth / p.camera.z;
-        p.screen.x = Math.round((width / 2) + (p.screen.scale * p.camera.x * width / 2));
-        p.screen.y = Math.round((height / 2) - (p.screen.scale * p.camera.y * height / 2));
-        p.screen.w = Math.round((p.screen.scale * roadWidth * width / 2));
-    }
-
     render(ctx, cameraZ, playerX, width, height) {
         const trackLength = this.segments.length * this.segmentLength;
         const cameraDepth = 1 / Math.tan((CAM.fov / 2) * Math.PI / 180);
-        
-        // Ensure cameraZ is within track bounds for finding the start segment
-        const safeCameraZ = cameraZ % trackLength; 
+
+        // Wrap the camera position so the track loops seamlessly.
+        // Segment colors and properties repeat via modulo lookup below.
+        const safeCameraZ = cameraZ % trackLength;
         const startPos = Math.floor(safeCameraZ / this.segmentLength);
         const endPos = startPos + 300; // Draw distance
+
+        // Near-plane clamp: the segment straddling the camera is projected from
+        // this depth instead, so the road always fills the bottom of the frame.
+        const nearZ = CAM.elevation * cameraDepth * 0.8;
 
         let maxy = height;
 
         for (let n = startPos; n < endPos; n++) {
             const segment = this.segments[n % this.segments.length];
-            
-            // Handle looping logic: if we wrap around, add trackLength to Z
-            const loopOffset = (n >= this.segments.length) ? trackLength : 0;
-            // Also handle if the camera is near the end of the track and we are drawing the start
-            // Actually, the simplest way is:
-            // segment.index is 0..500.
-            // If we are asking for segment 501 (which is 1), we add trackLength.
-            // But we need to use 'n' to calculate the absolute Z for projection.
-            
-            // Let's use the 'n' counter directly for Z calculation
-            // The segment's base Z is just n * segmentLength relative to the start of THIS render loop's conceptual linear road
-            // But we need to offset by cameraZ to get camera space.
-            
-            // Project p1
-            const worldZ1 = (n * this.segmentLength);
-            const worldZ2 = ((n + 1) * this.segmentLength);
-            
-            // We need to pass worldZ - cameraZ to the project method, NOT simple subtraction if we want to support the loop perfectly
-            // But since 'n' keeps increasing, worldZ keeps increasing. 
-            // cameraZ acts as the view point. 
-            // So relative Z = worldZ - cameraZ (where cameraZ is the TOTAL distance traveled)
-            // This works perfectly for infinite straight roads.
-            // The segment properties (color, curve) are just pulled from the array modulo length.
-            
-            // Project
-            this.project(segment.p1, playerX * this.width, CAM.elevation, cameraZ, cameraDepth, width, height, this.width, worldZ1);
-            this.project(segment.p2, playerX * this.width, CAM.elevation, cameraZ, cameraDepth, width, height, this.width, worldZ2);
 
-            // Clip
-            if (segment.p1.screen.y >= maxy || segment.p1.camera.z <= cameraDepth) continue;
+            // Project both edges of the segment into screen space
+            const worldZ1 = n * this.segmentLength;
+            const worldZ2 = (n + 1) * this.segmentLength;
+
+            // Skip segments entirely behind the camera
+            if (worldZ2 - safeCameraZ <= cameraDepth) continue;
+
+            this.project(segment.p1, playerX * this.width, CAM.elevation, safeCameraZ, cameraDepth, width, height, this.width, Math.max(worldZ1, safeCameraZ + nearZ));
+            this.project(segment.p2, playerX * this.width, CAM.elevation, safeCameraZ, cameraDepth, width, height, this.width, worldZ2);
+
+            // Cull back-facing slivers and segments fully hidden by nearer geometry
+            if (segment.p2.screen.y >= segment.p1.screen.y || segment.p2.screen.y >= maxy) continue;
             maxy = segment.p1.screen.y;
 
             this.drawSegment(ctx, width, this.lanes, segment.p1.screen.x, segment.p1.screen.y, segment.p1.screen.w, segment.p2.screen.x, segment.p2.screen.y, segment.p2.screen.w, segment.color);
         }
     }
 
-    // Updated project method to accept explicit worldZ
+    // Project 3D world coordinates to 2D screen coordinates
     project(p, cameraX, cameraY, cameraZ, cameraDepth, width, height, roadWidth, worldZ) {
         p.camera.x = (p.world.x || 0) - cameraX;
         p.camera.y = (p.world.y || 0) - cameraY;
         p.camera.z = worldZ - cameraZ;
-        
-        // Avoid division by zero or behind camera
+
+        // Avoid division by zero or projecting points behind the camera
         if (p.camera.z <= 0) return;
 
         p.screen.scale = cameraDepth / p.camera.z;
@@ -115,6 +88,8 @@ class Road {
         p.screen.y = Math.round((height / 2) - (p.screen.scale * p.camera.y * height / 2));
         p.screen.w = Math.round((p.screen.scale * roadWidth * width / 2));
     }
+
+    drawSegment(ctx, width, lanes, x1, y1, w1, x2, y2, w2, color) {
         const r1 = w1 / 10; // Rumble width
         const r2 = w2 / 10;
         const l1 = w1 / 40; // Lane width
@@ -128,7 +103,7 @@ class Road {
         this.fillPolygon(ctx, x1 - w1 - r1, y1, x1 - w1, y1, x2 - w2, y2, x2 - w2 - r2, y2, color.rumble);
         // Draw Rumble (Right)
         this.fillPolygon(ctx, x1 + w1 + r1, y1, x1 + w1, y1, x2 + w2, y2, x2 + w2 + r2, y2, color.rumble);
-        
+
         // Draw Road
         this.fillPolygon(ctx, x1 - w1, y1, x1 + w1, y1, x2 + w2, y2, x2 - w2, y2, color.road);
 
@@ -138,7 +113,7 @@ class Road {
             const laneW2 = w2 * 2 / lanes;
             let laneX1 = x1 - w1 + laneW1;
             let laneX2 = x2 - w2 + laneW2;
-            
+
             for(let i = 1; i < lanes; i++) {
                  this.fillPolygon(ctx, laneX1 - l1/2, y1, laneX1 + l1/2, y1, laneX2 + l2/2, y2, laneX2 - l2/2, y2, color.lane);
                  laneX1 += laneW1;
